@@ -68,6 +68,31 @@
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+/* ambient brand glow: a cobalt wash behind the hero, fading into the flat canvas */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(58% 42% at 50% -8%, color-mix(in srgb, var(--cobalt) 20%, transparent), transparent 72%),
+    radial-gradient(40% 30% at 88% 4%, color-mix(in srgb, var(--flag) 11%, transparent), transparent 70%),
+    radial-gradient(48% 34% at 6% 20%, color-mix(in srgb, var(--alert) 8%, transparent), transparent 70%);
+}
+/* a second, softer wash where the dark categories band sits, so the lower page isn't flat */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(70% 46% at 50% 118%, color-mix(in srgb, var(--cobalt) 14%, transparent), transparent 72%);
+}
+@supports not (background: color-mix(in srgb, red, blue)) {
+  body::before { background: radial-gradient(58% 42% at 50% -8%, var(--cobalt-soft), transparent 72%); }
+  body::after { display: none; }
+}
 a { color: var(--cobalt); text-underline-offset: 3px; }
 a:hover { color: var(--cobalt-hover); }
 :focus-visible { outline: 2px solid var(--cobalt); outline-offset: 3px; border-radius: 4px; }
