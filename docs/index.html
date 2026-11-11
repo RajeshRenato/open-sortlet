@@ -8,7 +8,7 @@
 <link rel="icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
 <style>
 /* Tokens are the app's own (src/renderer/styles.css), so the mocks match the real UI */
 :root {
@@ -76,9 +76,9 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(58% 42% at 50% -8%, color-mix(in srgb, var(--cobalt) 20%, transparent), transparent 72%),
-    radial-gradient(40% 30% at 88% 4%, color-mix(in srgb, var(--flag) 11%, transparent), transparent 70%),
-    radial-gradient(48% 34% at 6% 20%, color-mix(in srgb, var(--alert) 8%, transparent), transparent 70%);
+    radial-gradient(60% 48% at 50% -8%, color-mix(in srgb, var(--cobalt) 30%, transparent), transparent 74%),
+    radial-gradient(40% 32% at 88% 2%, color-mix(in srgb, var(--flag) 15%, transparent), transparent 72%),
+    radial-gradient(44% 34% at 10% 6%, color-mix(in srgb, var(--alert) 12%, transparent), transparent 72%);
 }
 /* a second, softer wash where the dark categories band sits, so the lower page isn't flat */
 body::after {
@@ -87,7 +87,7 @@ body::after {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: radial-gradient(70% 46% at 50% 118%, color-mix(in srgb, var(--cobalt) 14%, transparent), transparent 72%);
+  background: radial-gradient(74% 50% at 50% 116%, color-mix(in srgb, var(--cobalt) 20%, transparent), transparent 74%);
 }
 @supports not (background: color-mix(in srgb, red, blue)) {
   body::before { background: radial-gradient(58% 42% at 50% -8%, var(--cobalt-soft), transparent 72%); }
@@ -99,10 +99,18 @@ a:hover { color: var(--cobalt-hover); }
 .ic { flex: none; display: block; }
 .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
 
-/* type: the app's own heading treatment (condensed Instrument Sans), pushed to display sizes */
-.display, .h2 { font-stretch: 78%; font-weight: 650; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
-.display { font-size: clamp(54px, 9vw, 128px); line-height: 0.9; }
-.h2 { font-size: clamp(38px, 5.2vw, 68px); line-height: 0.96; }
+/* type: Bricolage Grotesque for display headings, with one gradient-accented word per heading */
+.display, .h2 { font-family: "Bricolage Grotesque", var(--font); font-weight: 760; letter-spacing: -0.03em; margin: 0; text-wrap: balance; }
+.display { font-size: clamp(50px, 7.8vw, 108px); line-height: 0.9; max-width: 15ch;
+  background-image: linear-gradient(165deg, var(--ink), color-mix(in srgb, var(--ink) 62%, var(--cobalt)));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.h2 { font-size: clamp(38px, 5.2vw, 66px); line-height: 0.95; color: var(--ink); }
+/* the accented word — a cobalt→violet gradient that ties every heading to the hero */
+.accent { background-image: linear-gradient(135deg, var(--cobalt), color-mix(in srgb, var(--cobalt) 60%, #b07bff));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: var(--cobalt); }
+@supports not (background-clip: text) {
+  .display { color: var(--ink); -webkit-text-fill-color: currentColor; } .accent { color: var(--cobalt); }
+}
 .lede { font-size: clamp(18px, 1.6vw, 21px); color: var(--ink-2); max-width: 40ch; margin: 0; }
 .prose { color: var(--ink-2); max-width: 52ch; margin: 0; }
 .prose + .prose { margin-top: 14px; }
@@ -117,15 +125,19 @@ a:hover { color: var(--cobalt-hover); }
 .top-links .pill { color: var(--ink); font-weight: 600; border: 1px solid var(--line-strong); background: var(--sheet); padding: 7px 14px; border-radius: 8px; }
 
 /* buttons */
-.btn { display: inline-flex; align-items: center; gap: 10px; background: var(--cobalt); color: #fff; text-decoration: none; font-weight: 600; font-size: 17px; padding: 14px 22px; border-radius: 10px; transition: background 0.15s; }
-.btn:hover { background: var(--cobalt-hover); color: #fff; }
-.get { display: grid; gap: 12px; justify-items: start; }
+.btn { display: inline-flex; align-items: center; gap: 10px; background: linear-gradient(180deg, color-mix(in srgb, var(--cobalt) 92%, white), var(--cobalt-hover)); color: #fff; text-decoration: none; font-weight: 600; font-size: 17px; padding: 15px 26px; border-radius: 13px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 12px 28px -10px color-mix(in srgb, var(--cobalt) 75%, transparent); transition: transform 0.15s, box-shadow 0.15s; }
+.btn:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 16px 34px -10px color-mix(in srgb, var(--cobalt) 80%, transparent); }
+.btn.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.btn.ghost:hover { box-shadow: inset 0 0 0 1px var(--cobalt); color: var(--cobalt); }
+.get { display: grid; gap: 12px; justify-items: center; }
 .get small { color: var(--muted); font-size: 14px; }
 .get small a { color: var(--ink-2); }
 
 /* hero */
-.hero-head { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 48px; align-items: end; padding-top: 40px; padding-bottom: 56px; }
-.hero-side { display: grid; gap: 28px; padding-bottom: 10px; }
+.hero-head { display: grid; grid-template-columns: 1fr; justify-items: center; text-align: center; gap: 26px; padding-top: 48px; padding-bottom: 60px; }
+.hero-head .display { margin: 0 auto; }
+.hero-side { display: grid; gap: 22px; justify-items: center; text-align: center; padding-bottom: 0; }
+.hero-side .lede { max-width: 52ch; }
 .stage { position: relative; padding-bottom: 28px; }
 .stage-inner { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
 .fit { position: relative; width: 100%; }
@@ -370,8 +382,11 @@ a:hover { color: var(--cobalt-hover); }
 .files a:hover { border-color: var(--cobalt); color: var(--ink); }
 .files a span { font-family: var(--mono); font-weight: 400; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; text-align: right; }
 
-.closing { padding: 120px 0; }
-.closing .wrap { display: flex; justify-content: space-between; align-items: end; gap: 40px; flex-wrap: wrap; }
+.closing { padding: 112px 0; border-top: 1px solid var(--line); }
+.closing .wrap { display: grid; justify-items: center; text-align: center; gap: 20px; }
+.closing .prose { max-width: 48ch; }
+.closing-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 4px; }
+.closing small { color: var(--muted); font-size: 14px; }
 footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 14px; }
 footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 footer a { color: var(--ink-2); margin-left: 18px; }
@@ -419,7 +434,7 @@ footer a { color: var(--ink-2); margin-left: 18px; }
 
 <main>
   <div class="wrap hero-head">
-    <h1 class="display">Every inbox, sorted.</h1>
+    <h1 class="display">Every inbox, <span class="accent">sorted.</span></h1>
     <div class="hero-side">
       <p class="lede">Sortlet pulls mail from Gmail, Outlook, iCloud and any IMAP account, sorts it into categories with Claude, flags what's waiting on you, and keeps every message on your own computer.</p>
       <div class="get">
@@ -515,7 +530,7 @@ The Zoom team</pre>
   <section class="band shelf" id="categories">
     <div class="wrap">
       <div class="band-head">
-        <h2 class="h2">Sorted into the categories you choose.</h2>
+        <h2 class="h2">Sorted into the <span class="accent">categories</span> you choose.</h2>
         <p class="prose">Every email lands in exactly one place. Sortlet starts with ten categories that fit most inboxes; rename them, add your own or remove them in Settings → Categories, one per line.</p>
       </div>
       <div class="shelf-grid">
@@ -542,7 +557,7 @@ The Zoom team</pre>
   <section class="band" id="flags">
     <div class="wrap flag-grid">
       <div>
-        <h2 class="h2">Two flags for what's waiting on you.</h2>
+        <h2 class="h2">Two flags for what's <span class="accent">waiting on you.</span></h2>
         <div class="flag-points">
           <div class="flag-point">
             <span class="badge reply"><i data-ic="flag" data-s="20"></i></span>
@@ -569,7 +584,7 @@ The Zoom team</pre>
   <section class="band tight" id="ask">
     <div class="wrap duo">
       <div class="duo-copy">
-        <h2 class="h2">Ask your mail a question.</h2>
+        <h2 class="h2">Ask your mail <span class="accent">a question.</span></h2>
         <p class="prose">Open <b>Ask</b> and type in plain words. Chat sees the dates, account and email you have open, so "this email" and "these" just work, and answers link straight to the emails they mention.</p>
         <p class="prose">It only reads unless you ask it to change something. Replies go to your Drafts folder and are never sent.</p>
         <div class="chips"><span>What needs my attention?</span><span>Any invoices or payments?</span><span>Who emailed me the most?</span><span>Draft a reply to this</span></div>
@@ -602,7 +617,7 @@ The Zoom team</pre>
   <section class="band" id="mcp">
     <div class="wrap duo flip">
       <div class="duo-copy">
-        <h2 class="h2">Bring your inbox into Claude and Copilot.</h2>
+        <h2 class="h2">Bring your inbox into <span class="accent">Claude and Copilot.</span></h2>
         <p class="prose">While Sortlet is open, Claude Code, Claude Desktop and GitHub Copilot in VS Code can search, sort and draft replies through MCP. Copy the config from Settings; nothing else to install.</p>
         <dl class="tool-list">
           <div><dt>search_emails</dt><dd>Text, dates, category, flags</dd></div>
@@ -633,7 +648,7 @@ The Zoom team</pre>
   <section class="band tight" id="privacy">
     <div class="wrap">
       <div class="band-head">
-        <h2 class="h2">Your mail stays on your computer.</h2>
+        <h2 class="h2">Your mail stays on <span class="accent">your computer.</span></h2>
         <p class="prose">There's no Sortlet server and no account to create. The app talks to your mail provider and, for sorting and chat, to Claude. That's all.</p>
       </div>
       <div class="facts">
@@ -651,7 +666,7 @@ The Zoom team</pre>
   <section class="band install" id="install">
     <div class="wrap">
       <div class="band-head">
-        <h2 class="h2">Install it in a minute.</h2>
+        <h2 class="h2">Install it in <span class="accent">a minute.</span></h2>
         <p class="prose">Version 0.2.0. Pick your system; the steps cover the one-time security prompt for apps downloaded outside an app store.</p>
       </div>
       <div class="os-tabs" role="tablist" aria-label="Operating system">
@@ -708,11 +723,13 @@ The Zoom team</pre>
 
   <section class="closing">
     <div class="wrap">
-      <h2 class="h2">Free to use.<br>Your mail stays yours.</h2>
-      <div class="get">
-        <a class="btn" href="https://github.com/RajeshRenato/open-sortlet/releases/latest">See the latest release</a>
-        <small>Version 0.2.0. Release notes and every file are on GitHub.</small>
+      <h2 class="h2">Free to use.<br>Your mail <span class="accent">stays yours.</span></h2>
+      <p class="prose">Sortlet is made and looked after by one person. If it keeps your inbox in order, you can chip in to keep the updates coming.</p>
+      <div class="closing-actions">
+        <a class="btn" href="https://github.com/RajeshRenato/open-sortlet/releases/latest"><i data-ic="download" data-s="18"></i>Download Sortlet</a>
+        <a class="btn ghost" href="https://github.com/sponsors/RajeshRenato" target="_blank" rel="noopener">☕&ensp;Buy the dev a coffee</a>
       </div>
+      <small>Version 0.2.0. Release notes and every file are on GitHub.</small>
     </div>
   </section>
 </main>
