@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sortlet: every inbox, sorted</title>
+<meta name="description" content="A desktop app that pulls mail from all your inboxes, sorts it into categories with Claude, flags what needs a reply, and keeps everything on your own computer.">
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<style>
+/* Tokens are the app's own (src/renderer/styles.css), so the mocks match the real UI */
+:root {
+  --canvas: #f2f4f7;
+  --sheet: #ffffff;
+  --sheet-2: #f7f8fa;
+  --line: #e2e6ec;
+  --line-strong: #cfd6df;
+  --ink: #172033;
+  --ink-2: #44506a;
+  --muted: #7a8699;
+  --cobalt: #2f54eb;
+  --cobalt-hover: #2445d4;
+  --cobalt-soft: rgba(47, 84, 235, 0.09);
+  --flag: #f5c518;
+  --flag-soft: rgba(245, 197, 24, 0.2);
+  --flag-ink: #6b5300;
+  --alert: #e5600a;
+  --alert-soft: rgba(247, 104, 8, 0.12);
+  --ok: #0f8a6c;
+  --ok-soft: rgba(18, 165, 148, 0.1);
+  --rail: #1c2433;
+  --rail-2: #232d3f;
+  --rail-ink: #e8ecf3;
+  --rail-muted: #8d97ab;
+  --rail-active: rgba(255, 255, 255, 0.12);
+  --window-shadow: 0 2px 4px rgba(23, 32, 51, 0.06), 0 30px 80px -20px rgba(23, 32, 51, 0.35), 0 0 0 1px rgba(23, 32, 51, 0.08);
+  --font: "Instrument Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #0f131b; --sheet: #161b25; --sheet-2: #1b2130; --line: #262e3e; --line-strong: #344057;
+    --ink: #e6eaf2; --ink-2: #b4bccb; --muted: #8691a6;
+    --cobalt: #5b7bff; --cobalt-hover: #6f8bff; --cobalt-soft: rgba(91, 123, 255, 0.16);
+    --flag-soft: rgba(245, 197, 24, 0.16); --flag-ink: #f5c518;
+    --alert: #ff8b3e; --alert-soft: rgba(255, 139, 62, 0.15);
+    --ok: #3dd6b5; --ok-soft: rgba(61, 214, 181, 0.12);
+    --rail: #0b0f16; --rail-2: #151b27;
+    --window-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 30px 80px -20px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.07);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --canvas: #0f131b; --sheet: #161b25; --sheet-2: #1b2130; --line: #262e3e; --line-strong: #344057;
+  --ink: #e6eaf2; --ink-2: #b4bccb; --muted: #8691a6;
+  --cobalt: #5b7bff; --cobalt-hover: #6f8bff; --cobalt-soft: rgba(91, 123, 255, 0.16);
+  --flag-soft: rgba(245, 197, 24, 0.16); --flag-ink: #f5c518;
+  --alert: #ff8b3e; --alert-soft: rgba(255, 139, 62, 0.15);
+  --ok: #3dd6b5; --ok-soft: rgba(61, 214, 181, 0.12);
+  --rail: #0b0f16; --rail-2: #151b27;
+  --window-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 30px 80px -20px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: var(--cobalt); text-underline-offset: 3px; }
+a:hover { color: var(--cobalt-hover); }
+:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 3px; border-radius: 4px; }
+.ic { flex: none; display: block; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+
+/* type: the app's own heading treatment (condensed Instrument Sans), pushed to display sizes */
+.display, .h2 { font-stretch: 78%; font-weight: 650; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+.display { font-size: clamp(54px, 9vw, 128px); line-height: 0.9; }
+.h2 { font-size: clamp(38px, 5.2vw, 68px); line-height: 0.96; }
+.lede { font-size: clamp(18px, 1.6vw, 21px); color: var(--ink-2); max-width: 40ch; margin: 0; }
+.prose { color: var(--ink-2); max-width: 52ch; margin: 0; }
+.prose + .prose { margin-top: 14px; }
+
+/* nav */
+.top { display: flex; align-items: center; justify-content: space-between; height: 76px; }
+.mark { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 19px; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+.mark img { width: 30px; height: 30px; }
+.top-links { display: flex; align-items: center; gap: 28px; font-size: 15px; }
+.top-links a { color: var(--ink-2); text-decoration: none; }
+.top-links a:hover { color: var(--ink); }
+.top-links .pill { color: var(--ink); font-weight: 600; border: 1px solid var(--line-strong); background: var(--sheet); padding: 7px 14px; border-radius: 8px; }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; gap: 10px; background: var(--cobalt); color: #fff; text-decoration: none; font-weight: 600; font-size: 17px; padding: 14px 22px; border-radius: 10px; transition: background 0.15s; }
+.btn:hover { background: var(--cobalt-hover); color: #fff; }
+.get { display: grid; gap: 12px; justify-items: start; }
+.get small { color: var(--muted); font-size: 14px; }
+.get small a { color: var(--ink-2); }
+
+/* hero */
+.hero-head { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 48px; align-items: end; padding-top: 40px; padding-bottom: 56px; }
+.hero-side { display: grid; gap: 28px; padding-bottom: 10px; }
+.stage { position: relative; padding-bottom: 28px; }
+.stage-inner { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+.fit { position: relative; width: 100%; }
+.fit > .m { transform-origin: top left; position: absolute; top: 0; left: 0; }
+.stage-foot { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 18px; color: var(--muted); font-size: 14px; flex-wrap: wrap; }
+.replay { font: inherit; font-size: 14px; font-weight: 600; color: var(--cobalt); background: var(--sheet); border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 14px; cursor: pointer; display: inline-flex; gap: 7px; align-items: center; }
+.replay:hover { border-color: var(--cobalt); }
+
+/* ================= App mock (scoped under .m, class names follow the app) ================= */
+.m { font-size: 13.5px; line-height: 1.45; color: var(--ink); text-align: left; }
+.m-window { width: 1200px; height: 800px; display: grid; grid-template-columns: 236px 1fr; background: var(--canvas); border-radius: 12px; overflow: hidden; box-shadow: var(--window-shadow); position: relative; }
+.m .lights { position: absolute; top: 17px; left: 17px; display: flex; gap: 8px; z-index: 2; }
+.m .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+.m .lights i:nth-child(2) { background: #febc2e; }
+.m .lights i:nth-child(3) { background: #28c840; }
+.m .sidebar { background: var(--rail); color: var(--rail-ink); display: flex; flex-direction: column; padding: 0 12px 12px; overflow: hidden; }
+.m .brand { display: flex; align-items: center; gap: 10px; padding: 46px 6px 16px; font-weight: 650; font-size: 15px; letter-spacing: -0.01em; }
+.m .brand img { width: 28px; height: 28px; margin: -2px 0; }
+.m .quick, .m .accounts { display: flex; flex-direction: column; gap: 1px; }
+.m .nav { display: flex; align-items: center; gap: 10px; width: 100%; color: var(--rail-ink); padding: 7px 8px; border-radius: 7px; min-height: 33px; }
+.m .nav.active { background: var(--rail-active); }
+.m .nav .ic { color: var(--rail-muted); }
+.m .nav.active .ic { color: var(--rail-ink); }
+.m .nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m .nav-label small { color: var(--rail-muted); margin-left: 7px; font-size: 11px; }
+.m .count { color: var(--rail-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.m .count.flagged { background: var(--flag); color: #3a2e00; font-weight: 700; border-radius: 10px; padding: 0 7px; min-width: 22px; text-align: center; }
+.m .count.alerted { background: #ff8b3e; color: #2b1100; font-weight: 700; border-radius: 10px; padding: 0 7px; min-width: 22px; text-align: center; }
+.m .nav.reply .ic { color: var(--flag); }
+.m .nav.attention .ic { color: #ff8b3e; }
+.m .nav.unsorted { overflow: hidden; transition: opacity 0.3s, min-height 0.3s, height 0.3s, padding 0.3s; height: 33px; }
+.m .nav.unsorted.gone { opacity: 0; min-height: 0; height: 0; padding-top: 0; padding-bottom: 0; }
+.m .side-title { display: flex; justify-content: space-between; align-items: center; margin: 20px 8px 8px; font-size: 12px; font-weight: 600; color: var(--rail-muted); }
+.m .side-add { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--rail-2); color: var(--rail-ink); }
+.m .rack { display: flex; flex-direction: column; gap: 3px; }
+.m .slot { position: relative; display: flex; align-items: center; gap: 8px; background: var(--rail-2); color: var(--rail-ink); height: 30px; padding: 0 10px 0 12px; border-radius: 6px; overflow: hidden; }
+.m .slot::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
+.m .slot-fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--fill, 0%); background: var(--c); opacity: 0.24; transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.m .slot-label, .m .slot .count { position: relative; }
+.m .slot-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m .slot .count { color: var(--rail-ink); font-weight: 600; }
+.m .slot.is-empty .slot-label { color: var(--rail-muted); }
+.m .avatar { display: inline-grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 50%; font-size: 10px; font-weight: 700; color: #fff; }
+.m .avatar.all { background: var(--rail-2); color: var(--rail-ink); box-shadow: inset 0 0 0 1px var(--rail-muted); }
+.m .side-settings { display: flex; align-items: center; gap: 10px; color: var(--rail-ink); padding: 10px 8px; margin-top: auto; }
+.m .side-settings .ic { color: var(--rail-muted); }
+.m .side-settings small { display: block; color: var(--rail-muted); font-size: 11.5px; }
+
+.m .main { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.m .toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--sheet); border-bottom: 1px solid var(--line); }
+.m .segmented { display: flex; background: var(--canvas); border-radius: 9px; padding: 3px; gap: 2px; flex: none; }
+.m .segmented span { padding: 5px 10px; border-radius: 6px; color: var(--ink-2); font-weight: 500; white-space: nowrap; }
+.m .segmented span.on { background: var(--sheet); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(23, 32, 51, 0.12); }
+.m .search { flex: 1 1 200px; min-width: 0; display: flex; align-items: center; gap: 8px; background: var(--canvas); border-radius: 8px; padding: 7px 10px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.m .tool { display: inline-flex; align-items: center; gap: 7px; background: var(--sheet); border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 12px; font-weight: 500; flex: none; }
+.m .primary { display: inline-flex; align-items: center; gap: 7px; background: var(--cobalt); color: #fff; border-radius: 8px; padding: 7px 14px; font-weight: 600; flex: none; }
+.m .progress { display: flex; align-items: center; gap: 12px; padding: 7px 16px; background: var(--cobalt-soft); font-size: 12.5px; color: var(--ink-2); transition: background 0.3s; }
+.m .progress.done { background: var(--ok-soft); }
+.m .progress .bar { flex: 1; max-width: 280px; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.m .progress .bar div { height: 100%; width: 0; background: var(--cobalt); transition: width 0.2s; }
+.m .progress.done .bar { visibility: hidden; }
+.m .content { flex: 1; display: grid; grid-template-columns: 40% 1fr; min-height: 0; }
+.m .list { background: var(--sheet); border-right: 1px solid var(--line); overflow: hidden; }
+.m .list-head { background: var(--sheet); padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
+.m .list-head h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.015em; font-stretch: 92%; }
+.m .list-sub { color: var(--muted); font-size: 12.5px; }
+.m .list-sub b { color: var(--ink-2); font-weight: 600; }
+.m ul.rows { list-style: none; margin: 0; padding: 0; }
+.m .row { position: relative; padding: 11px 18px 11px 20px; border-bottom: 1px solid var(--line); --c: #b4bcc8; background: var(--sheet); }
+.m .row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); opacity: 0.85; transition: background 0.3s; }
+.m .row.sel { background: var(--cobalt-soft); }
+.m .row.sel::after { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: var(--cobalt); }
+.m .row.flash { animation: flash 0.7s ease-out; }
+@keyframes flash { from { box-shadow: inset 0 0 0 999px var(--cobalt-soft); } }
+.m .row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.m .from { color: var(--ink-2); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m .when { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.m .subject { margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m .row.unread .from { color: var(--ink); font-weight: 650; }
+.m .row.unread .subject { font-weight: 600; }
+.m .row.unread .when { color: var(--cobalt); font-weight: 600; }
+.m .snippet { color: var(--muted); font-size: 12.5px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m .row-meta { display: flex; gap: 10px; align-items: center; margin-top: 7px; font-size: 11.5px; min-height: 18px; }
+.m .cat { color: var(--c); font-weight: 650; transition: color 0.3s; flex: none; }
+.m .row:not(.sorted) .cat { color: var(--muted); }
+.m .flag, .m .attn { display: inline-flex; align-items: center; gap: 4px; font-weight: 650; border-radius: 4px; padding: 1px 6px; flex: none; }
+.m .flag { background: var(--flag-soft); color: var(--flag-ink); }
+.m .attn { background: var(--alert-soft); color: var(--alert); }
+.m .acct { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.m .acct i { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.m .row:not(.sorted) .flag, .m .row:not(.sorted) .attn { display: none; }
+
+.m .detail { background: var(--canvas); overflow: hidden; }
+.m .email { margin: 20px 24px; background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; padding: 24px 28px 28px; }
+.m .email-top { display: flex; align-items: flex-start; gap: 16px; }
+.m .email h1 { flex: 1; font-size: 22px; line-height: 1.25; font-weight: 650; letter-spacing: -0.02em; font-stretch: 92%; margin: 0 0 14px; }
+.m .done-btn { display: inline-flex; align-items: center; gap: 6px; flex: none; margin-top: 2px; border: 1px solid var(--line-strong); background: var(--sheet); border-radius: 8px; padding: 6px 12px; font-weight: 600; }
+.m .email-meta { display: flex; flex-direction: column; gap: 2px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.m .muted { color: var(--muted); }
+.m .small { font-size: 12px; }
+.m .classify { display: flex; align-items: center; gap: 16px; padding: 14px 0; flex-wrap: wrap; }
+.m .classify label { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 12.5px; color: var(--ink-2); }
+.m .select { display: inline-flex; align-items: center; gap: 18px; border: 1.5px solid var(--c, var(--line-strong)); border-radius: 8px; padding: 5px 10px; font-weight: 600; color: var(--ink); background: var(--sheet); transition: border-color 0.3s; }
+.m .select::after { content: ""; width: 7px; height: 7px; border-right: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted); transform: rotate(45deg) translate(-2px, -2px); }
+.m .box { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--line-strong); display: inline-grid; place-items: center; background: var(--sheet); }
+.m .box.on { background: var(--cobalt); border-color: var(--cobalt); color: #fff; }
+.m .attention-note { display: flex; gap: 10px; align-items: flex-start; background: var(--alert-soft); color: var(--ink); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
+.m .attention-note .ic { color: var(--alert); margin-top: 2px; }
+.m .attention-note p { margin: 0; font-weight: 550; }
+.m .summary { border-left: 3px solid var(--cobalt); background: var(--cobalt-soft); border-radius: 0 8px 8px 0; padding: 9px 14px; margin-bottom: 18px; }
+.m .summary span { color: var(--cobalt); font-size: 11.5px; font-weight: 650; }
+.m .summary p { margin: 2px 0 0; }
+.m .body { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.65; color: var(--ink-2); margin: 0; }
+.m .reveal { transition: opacity 0.4s, transform 0.4s; }
+.m .pending .reveal { opacity: 0; transform: translateY(4px); }
+
+/* chat */
+.m.chat { display: flex; flex-direction: column; background: var(--sheet); border-radius: 12px; overflow: hidden; box-shadow: var(--window-shadow); }
+.m .chat-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--line); }
+.m .chat-head b { font-weight: 650; }
+.m .chat-head > div { display: flex; gap: 12px; align-items: center; color: var(--muted); }
+.m .link { color: var(--cobalt); font-weight: 600; font-size: 12.5px; }
+.m .chat-scope { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 8px 18px; border-bottom: 1px solid var(--line); }
+.m .scope { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; font-size: 11.5px; color: var(--ink-2); background: var(--canvas); border-radius: 999px; padding: 2px 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m .chat-scroll { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.m .bubble { line-height: 1.55; overflow-wrap: anywhere; }
+.m .bubble.user { align-self: flex-end; background: var(--cobalt); color: #fff; padding: 8px 12px; border-radius: 12px 12px 3px 12px; max-width: 85%; }
+.m .bubble.assistant { color: var(--ink); padding: 2px 0 2px 12px; border-left: 2px solid var(--line-strong); }
+.m .bubble p { margin: 0 0 6px; }
+.m .bubble p:last-child { margin-bottom: 0; }
+.m .bubble ul { margin: 4px 0 6px; padding-left: 18px; }
+.m .bubble li { margin: 3px 0; }
+.m .email-link { color: var(--cobalt); font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.m .status { color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.m .chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); align-items: flex-end; }
+.m .chat-input .ta { flex: 1; background: var(--canvas); border-radius: 8px; padding: 7px 10px; color: var(--muted); min-height: 52px; }
+.m .chat-input .primary { padding: 9px 11px; }
+
+/* settings modal */
+.m.modal { background: var(--sheet); border-radius: 14px; box-shadow: var(--window-shadow); overflow: hidden; }
+.m .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px 6px 22px; }
+.m .modal-head h2 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.m .modal-head .ic { color: var(--muted); }
+.m .modal-body { padding: 6px 22px 22px; display: flex; flex-direction: column; gap: 12px; }
+.m .tabs { display: flex; gap: 2px; background: var(--canvas); border-radius: 9px; padding: 3px; overflow: hidden; }
+.m .tabs span { flex: 1 1 auto; padding: 6px 8px; font-size: 13px; color: var(--ink-2); border-radius: 6px; font-weight: 500; white-space: nowrap; text-align: center; }
+.m .tabs span.on { background: var(--sheet); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(23, 32, 51, 0.12); }
+.m .snippet-box { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.m .snippet-head { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; background: var(--sheet-2); border-bottom: 1px solid var(--line); gap: 10px; font-size: 12px; }
+.m .snippet-box pre { margin: 0; padding: 10px 12px; font-size: 12px; overflow: hidden; font-family: var(--mono); color: var(--ink-2); white-space: pre-wrap; word-break: break-all; }
+.m .engine { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line-strong); border-radius: 10px; padding: 11px 12px; }
+.m .engine b { color: var(--ink); }
+.m .engine p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.m .radio { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--line-strong); flex: none; margin-top: 2px; background: var(--sheet); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .m .segmented span.on, :root:not([data-theme="light"]) .m .tabs span.on { background: var(--line-strong); }
+}
+:root[data-theme="dark"] .m .segmented span.on, :root[data-theme="dark"] .m .tabs span.on { background: var(--line-strong); }
+
+/* ================= Page sections ================= */
+.band { padding: 120px 0; }
+.band.tight { padding-top: 0; }
+.band-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: end; margin-bottom: 56px; }
+
+/* categories: drawn on the app's rail colours in both themes */
+.shelf { background: #1c2433; color: #e8ecf3; margin-top: 92px; }
+:root[data-theme="dark"] .shelf { background: #0b0f16; box-shadow: inset 0 1px 0 #1d2534, inset 0 -1px 0 #1d2534; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .shelf { background: #0b0f16; box-shadow: inset 0 1px 0 #1d2534, inset 0 -1px 0 #1d2534; } }
+.shelf .h2 { color: #fff; }
+.shelf .prose { color: #b9c2d3; }
+.shelf-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 64px; align-items: start; }
+.big-rack { display: flex; flex-direction: column; gap: 6px; }
+.big-slot { position: relative; display: grid; grid-template-columns: minmax(0, 13ch) minmax(0, 1fr) auto; align-items: center; gap: 20px; height: 54px; padding: 0 18px 0 22px; border-radius: 9px; background: #232d3f; overflow: hidden; --c: #98a2b3; }
+:root[data-theme="dark"] .big-slot { background: #151b27; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .big-slot { background: #151b27; } }
+.big-slot::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c); }
+.big-slot .fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--fill); background: var(--c); opacity: 0.22; }
+.big-slot > span { position: relative; }
+.big-slot .name { font-weight: 650; font-size: 16px; white-space: nowrap; }
+.big-slot .what { color: #aab4c6; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.big-slot .n { font-weight: 650; font-variant-numeric: tabular-nums; font-size: 15px; }
+.rack-caption { color: #8d97ab; font-size: 13.5px; margin: 14px 0 0; }
+.shelf-side { display: grid; gap: 28px; }
+.shelf-side h3 { font-size: 15px; font-weight: 650; margin: 0 0 12px; color: #e8ecf3; }
+.engines { display: flex; flex-direction: column; gap: 8px; }
+.shelf .engine { border-color: #344057; background: #232d3f; color: #e8ecf3; }
+.shelf .engine b { color: #fff; }
+.shelf .engine p { color: #aab4c6; }
+.shelf .engine.on { border-color: #5b7bff; background: rgba(91, 123, 255, 0.18); }
+.shelf .radio { border-color: #4a5670; background: transparent; }
+.shelf .engine.on .radio { border: 4.5px solid #5b7bff; }
+.note-line { display: flex; gap: 12px; align-items: flex-start; color: #b9c2d3; font-size: 15.5px; border-top: 1px solid #344057; padding-top: 22px; margin: 0; }
+.note-line .ic { color: #3dd6b5; margin-top: 4px; }
+.note-line b { color: #fff; }
+
+/* flags */
+.flag-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 64px; align-items: center; }
+.flag-points { display: grid; gap: 28px; margin-top: 40px; }
+.flag-point { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 16px; }
+.flag-point .badge { width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center; }
+.flag-point .badge.reply { background: var(--flag-soft); color: var(--flag-ink); }
+.flag-point .badge.attention { background: var(--alert-soft); color: var(--alert); }
+.flag-point .badge.done { background: var(--ok-soft); color: var(--ok); }
+.flag-point h3 { margin: 0 0 4px; font-size: 18px; font-weight: 650; }
+.flag-point p { margin: 0; color: var(--ink-2); font-size: 16px; }
+.m.panel { background: var(--sheet); border-radius: 12px; overflow: hidden; box-shadow: var(--window-shadow); }
+
+/* ask + mcp */
+.duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 64px; align-items: center; }
+.duo.flip > :first-child { order: 2; }
+.duo-copy { display: grid; gap: 20px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips span { border: 1px solid var(--line-strong); background: var(--sheet); color: var(--ink-2); border-radius: 999px; padding: 6px 14px; font-size: 14px; }
+.tool-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; margin: 0; }
+.tool-list div { padding: 11px 0; border-top: 1px solid var(--line-strong); }
+.tool-list dt { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+.tool-list dd { margin: 3px 0 0; color: var(--ink-2); font-size: 14.5px; }
+
+/* privacy */
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.facts > div { background: var(--sheet); padding: 26px 26px 28px; display: grid; gap: 6px; align-content: start; }
+.facts .ic { color: var(--cobalt); margin-bottom: 8px; }
+.facts h3 { margin: 0; font-size: 17px; font-weight: 650; }
+.facts p { margin: 0; color: var(--ink-2); font-size: 15.5px; }
+
+/* install */
+.install { background: var(--sheet); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.os-tabs { display: inline-flex; gap: 2px; padding: 3px; background: var(--canvas); border-radius: 10px; margin-bottom: 32px; }
+.os-tabs button { font: inherit; font-size: 15px; font-weight: 500; color: var(--ink-2); background: none; border: 0; padding: 8px 20px; border-radius: 7px; cursor: pointer; }
+.os-tabs button[aria-selected="true"] { background: var(--sheet); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(23, 32, 51, 0.14); }
+:root[data-theme="dark"] .os-tabs button[aria-selected="true"] { background: var(--line-strong); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .os-tabs button[aria-selected="true"] { background: var(--line-strong); } }
+.os-panel { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 56px; }
+.os-panel[hidden] { display: none; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 18px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; color: var(--ink-2); }
+.steps li::before { content: counter(s); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--canvas); border: 1px solid var(--line); color: var(--ink); font-weight: 600; font-size: 14px; }
+.steps strong { color: var(--ink); }
+.steps pre { margin: 10px 0 0; background: var(--rail); color: var(--rail-ink); padding: 14px 16px; border-radius: 10px; overflow-x: auto; font-size: 13.5px; }
+.files { display: grid; gap: 10px; align-content: start; }
+.files a { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 14px 18px; background: var(--canvas); border: 1px solid var(--line); border-radius: 10px; text-decoration: none; color: var(--ink); font-weight: 600; font-size: 15px; }
+.files a:hover { border-color: var(--cobalt); color: var(--ink); }
+.files a span { font-family: var(--mono); font-weight: 400; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; text-align: right; }
+
+.closing { padding: 120px 0; }
+.closing .wrap { display: flex; justify-content: space-between; align-items: end; gap: 40px; flex-wrap: wrap; }
+footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 14px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+footer a { color: var(--ink-2); margin-left: 18px; }
+
+@media (max-width: 960px) {
+  .hero-head, .band-head, .shelf-grid, .flag-grid, .duo, .os-panel { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .duo.flip > :first-child { order: 0; }
+  .band, .closing { padding: 84px 0; }
+  .band.tight { padding-top: 0; }
+  .shelf { margin-top: 64px; }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .top-links a:not(.pill) { display: none; }
+}
+@media (max-width: 640px) {
+  .wrap, .stage-inner { padding: 0 16px; }
+  .hero-head { padding-top: 16px; padding-bottom: 40px; }
+  .facts, .tool-list { grid-template-columns: minmax(0, 1fr); }
+  .big-slot { grid-template-columns: minmax(0, 1fr) auto; height: auto; padding: 10px 14px 10px 18px; gap: 2px 12px; }
+  .big-slot .what { grid-column: 1; grid-row: 2; font-size: 13.5px; white-space: normal; }
+  .big-slot .n { grid-row: 1 / 3; grid-column: 2; }
+  .os-tabs { display: flex; }
+  .os-tabs button { flex: 1; padding: 8px; }
+  .m .tabs span:nth-child(-n+2) { display: none; }
+  footer a { margin: 0 18px 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="wrap top">
+  <a class="mark" href="#"><img src="icon.png" alt="">Sortlet</a>
+  <nav class="top-links" aria-label="Sections">
+    <a href="#categories">Categories</a>
+    <a href="#flags">Flags</a>
+    <a href="#ask">Ask</a>
+    <a href="#mcp">Claude &amp; Copilot</a>
+    <a href="#privacy">Privacy</a>
+    <a class="pill" href="#install">Download</a>
+  </nav>
+</header>
+
+<main>
+  <div class="wrap hero-head">
+    <h1 class="display">Every inbox, sorted.</h1>
+    <div class="hero-side">
+      <p class="lede">Sortlet pulls mail from Gmail, Outlook, iCloud and any IMAP account, sorts it into categories with Claude, flags what's waiting on you, and keeps every message on your own computer.</p>
+      <div class="get">
+        <a class="btn" id="primary-download" href="https://github.com/RajeshRenato/open-sortlet/releases/latest">
+          <i data-ic="download" data-s="18"></i>
+          <span id="primary-label">Download Sortlet</span>
+        </a>
+        <small id="primary-note">Version 0.2.0 for macOS, Windows and Linux. <a href="#install">All downloads</a></small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hero: the real app, sorting a morning of mail -->
+  <div class="stage">
+    <div class="stage-inner">
+      <div class="fit" data-w="1200" data-h="800" role="img" aria-label="The Sortlet app sorting fifteen emails into categories, with three needing a reply and three needing attention">
+        <div class="m m-window" id="app" aria-hidden="true">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <aside class="sidebar">
+            <div class="brand"><img src="icon.png" alt="">Sortlet</div>
+            <nav class="quick">
+              <div class="nav active"><i data-ic="inbox"></i><span class="nav-label">All mail</span><span class="count">15</span></div>
+              <div class="nav reply"><i data-ic="flag"></i><span class="nav-label">Needs reply</span><span class="count" id="c-reply">0</span></div>
+              <div class="nav attention"><i data-ic="alert"></i><span class="nav-label">Needs attention</span><span class="count" id="c-attn">0</span></div>
+              <div class="nav unsorted" id="unsorted"><i data-ic="sort"></i><span class="nav-label">Unsorted</span><span class="count" id="c-unsorted">15</span></div>
+            </nav>
+            <h3 class="side-title">Sorted into</h3>
+            <nav class="rack" id="rack"></nav>
+            <h3 class="side-title">Accounts <span class="side-add"><i data-ic="plus" data-s="14"></i></span></h3>
+            <nav class="accounts">
+              <div class="nav active"><span class="avatar all">2</span><span class="nav-label">All accounts</span></div>
+              <div class="nav"><span class="avatar" style="background:#3E7BFA">W</span><span class="nav-label">Work<small>Gmail</small></span></div>
+              <div class="nav"><span class="avatar" style="background:#12A594">P</span><span class="nav-label">Personal<small>IMAP</small></span></div>
+            </nav>
+            <div class="side-settings"><i data-ic="settings"></i><span>Settings<small>Sorting with Claude Code</small></span></div>
+          </aside>
+          <div class="main">
+            <header class="toolbar">
+              <div class="segmented"><span>24 hours</span><span class="on">Today</span><span>Yesterday</span><span>7 days</span><span>30 days</span><span>Custom</span></div>
+              <div class="search"><i data-ic="search"></i>Search sender, subject or text</div>
+              <span class="tool"><i data-ic="sort"></i>Re-sort</span>
+              <span class="tool"><i data-ic="chat"></i>Ask</span>
+              <span class="primary"><i data-ic="scan"></i>Scan</span>
+            </header>
+            <div class="progress" id="progress"><span id="progress-text">Categorizing 0/15</span><div class="bar"><div id="progress-bar"></div></div></div>
+            <div class="content">
+              <section class="list">
+                <div class="list-head"><h2>All mail</h2><span class="list-sub"><b>15</b> emails, <span class="today"></span></span></div>
+                <ul class="rows" id="rows"></ul>
+              </section>
+              <section class="detail">
+                <article class="email pending" id="reading">
+                  <div class="email-top">
+                    <h1>Payment failed for Zoom Workplace Pro</h1>
+                    <span class="done-btn reveal"><i data-ic="check" data-s="15"></i>Mark done</span>
+                  </div>
+                  <div class="email-meta">
+                    <div><strong>Zoom</strong> <span class="muted">&lt;billing@zoom.example&gt;</span></div>
+                    <div class="muted">To you@lumen.studio, <span class="today"></span>, 8:12 AM</div>
+                  </div>
+                  <div class="classify">
+                    <label>Category <span class="select" id="reading-cat">Unsorted</span></label>
+                    <label><span class="box"></span>Needs reply</label>
+                    <label><span class="box" id="reading-attn"></span>Needs attention</label>
+                    <span class="muted small reveal">Sorted by Claude Code</span>
+                  </div>
+                  <div class="attention-note reveal"><i data-ic="alert" data-s="15"></i><p>Zoom payment failed; update the card before Nov 14 or the plan drops to Basic.</p></div>
+                  <div class="summary reveal"><span>Summary</span><p>The renewal charge on the card ending 4417 was declined. Zoom retries in 3 days.</p></div>
+                  <pre class="body">Hi there,
+
+We weren't able to charge the card ending in 4417 for your
+Zoom Workplace Pro renewal ($149.90).
+
+Update your payment method before November 14 to keep cloud
+recording and meetings longer than 40 minutes.
+
+Update billing details
+The Zoom team</pre>
+                </article>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stage-foot">
+        <span>The real app, sorting a morning of mail from two inboxes.</span>
+        <button class="replay" id="replay" type="button"><i data-ic="scan" data-s="15"></i>Sort it again</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Categories -->
+  <section class="band shelf" id="categories">
+    <div class="wrap">
+      <div class="band-head">
+        <h2 class="h2">Sorted into the categories you choose.</h2>
+        <p class="prose">Every email lands in exactly one place. Sortlet starts with ten categories that fit most inboxes; rename them, add your own or remove them in Settings → Categories, one per line.</p>
+      </div>
+      <div class="shelf-grid">
+        <div>
+          <div class="big-rack" id="big-rack"></div>
+          <p class="rack-caption">A typical week of mail, as it fills the "Sorted into" rack in the sidebar.</p>
+        </div>
+        <div class="shelf-side">
+          <div>
+            <h3>Pick what does the sorting</h3>
+            <div class="m engines">
+              <div class="engine on"><span class="radio"></span><div><b>Claude Code (local)</b><p>Uses your installed claude CLI and your own Claude login. No API key needed.</p></div></div>
+              <div class="engine"><span class="radio"></span><div><b>Claude API</b><p>Uses an Anthropic API key. Most reliable for large scans.</p></div></div>
+              <div class="engine"><span class="radio"></span><div><b>Rules only</b><p>Free and offline keyword and sender rules. Nothing leaves your computer.</p></div></div>
+            </div>
+          </div>
+          <p class="note-line"><i data-ic="check"></i><span><b>Your choices stick.</b> Move an email to another category by hand and re-sorting never moves it back. If an AI batch fails, the rules step in so nothing stays unsorted.</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Flags -->
+  <section class="band" id="flags">
+    <div class="wrap flag-grid">
+      <div>
+        <h2 class="h2">Two flags for what's waiting on you.</h2>
+        <div class="flag-points">
+          <div class="flag-point">
+            <span class="badge reply"><i data-ic="flag" data-s="20"></i></span>
+            <div><h3>Needs reply</h3><p>A real person asked you something and is waiting on your answer. Newsletters and no-reply senders never land here.</p></div>
+          </div>
+          <div class="flag-point">
+            <span class="badge attention"><i data-ic="alert" data-s="20"></i></span>
+            <div><h3>Needs attention</h3><p>Something to act on even when there's nothing to reply to: failed payments, expiring cards, new sign-ins, changed flights, signatures waiting. Each one says why.</p></div>
+          </div>
+          <div class="flag-point">
+            <span class="badge done"><i data-ic="check" data-s="20"></i></span>
+            <div><h3>Mark done</h3><p>Handled it? Mark it done in the reading pane, in chat, or from Claude, and it leaves both lists.</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="m panel" aria-label="The Needs attention view">
+        <div class="list-head"><h2>Needs attention</h2><span class="list-sub"><b>4</b> emails, last 7 days</span></div>
+        <ul class="rows" id="attn-rows"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Ask -->
+  <section class="band tight" id="ask">
+    <div class="wrap duo">
+      <div class="duo-copy">
+        <h2 class="h2">Ask your mail a question.</h2>
+        <p class="prose">Open <b>Ask</b> and type in plain words. Chat sees the dates, account and email you have open, so "this email" and "these" just work, and answers link straight to the emails they mention.</p>
+        <p class="prose">It only reads unless you ask it to change something. Replies go to your Drafts folder and are never sent.</p>
+        <div class="chips"><span>What needs my attention?</span><span>Any invoices or payments?</span><span>Who emailed me the most?</span><span>Draft a reply to this</span></div>
+      </div>
+      <div class="m chat" aria-label="The Ask panel">
+        <div class="chat-head"><b>Ask about your emails</b><div><span class="link">New chat</span><i data-ic="close" data-s="15"></i></div></div>
+        <div class="chat-scope"><span class="scope"><i data-ic="target" data-s="12"></i>All accounts</span><span class="scope">Last 7 days</span></div>
+        <div class="chat-scroll">
+          <div class="bubble user">What needs my reply this week?</div>
+          <div class="bubble assistant">
+            <p>Three people are waiting on you:</p>
+            <ul>
+              <li><span class="email-link">Daniel Okafor</span> asked if Thursday 10am works for the Q4 rollout walkthrough.</li>
+              <li><span class="email-link">Priya Raman</span> needs the signed SOW by Friday.</li>
+              <li><span class="email-link">Mom</span> wants to know if you're coming on the 23rd.</li>
+            </ul>
+          </div>
+          <div class="bubble user">Draft a reply to Daniel saying Thursday works.</div>
+          <div class="bubble assistant">
+            <div class="status"><i data-ic="check" data-s="13"></i>Saved a draft</div>
+            <p>Done. It's in your Work drafts, threaded under his email, ready for you to review and send.</p>
+          </div>
+        </div>
+        <div class="chat-input"><div class="ta">e.g. What did Priya ask me this week?</div><span class="primary"><i data-ic="send"></i></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MCP -->
+  <section class="band" id="mcp">
+    <div class="wrap duo flip">
+      <div class="duo-copy">
+        <h2 class="h2">Bring your inbox into Claude and Copilot.</h2>
+        <p class="prose">While Sortlet is open, Claude Code, Claude Desktop and GitHub Copilot in VS Code can search, sort and draft replies through MCP. Copy the config from Settings; nothing else to install.</p>
+        <dl class="tool-list">
+          <div><dt>search_emails</dt><dd>Text, dates, category, flags</dd></div>
+          <div><dt>get_thread</dt><dd>The whole conversation</dd></div>
+          <div><dt>update_emails</dt><dd>Re-categorize, flag, mark done</dd></div>
+          <div><dt>create_draft</dt><dd>Save a threaded reply</dd></div>
+          <div><dt>scan_emails</dt><dd>Fetch any date range</dd></div>
+          <div><dt>sender_stats</dt><dd>Who emails you most</dd></div>
+        </dl>
+      </div>
+      <div class="m modal" aria-label="Settings, Connect Claude / Copilot tab">
+        <div class="modal-head"><h2>Settings</h2><i data-ic="close" data-s="16"></i></div>
+        <div class="modal-body">
+          <div class="tabs"><span>Categorization</span><span>Google OAuth</span><span class="on">Connect Claude / Copilot</span><span>Categories</span></div>
+          <p class="muted small" style="margin:0">Sortlet exposes your local mail store as an MCP server, so Claude or Copilot can search, summarize, sort and draft replies while this app is running.</p>
+          <div class="snippet-box"><div class="snippet-head"><span>Claude Code (terminal)</span><span class="link">Copy</span></div><pre>claude mcp add --scope user sortlet -- "/Applications/Sortlet.app/Contents/MacOS/Sortlet" ".../mcp-bridge.mjs"</pre></div>
+          <div class="snippet-box"><div class="snippet-head"><span>Claude Desktop</span><span class="link">Copy</span></div><pre>{
+  "mcpServers": {
+    "sortlet": { "command": "/Applications/Sortlet.app/…", "args": ["…/mcp-bridge.mjs"] }
+  }
+}</pre></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Privacy -->
+  <section class="band tight" id="privacy">
+    <div class="wrap">
+      <div class="band-head">
+        <h2 class="h2">Your mail stays on your computer.</h2>
+        <p class="prose">There's no Sortlet server and no account to create. The app talks to your mail provider and, for sorting and chat, to Claude. That's all.</p>
+      </div>
+      <div class="facts">
+        <div><i data-ic="database" data-s="22"></i><h3>Stored locally</h3><p>Emails live in a database on your machine that only your user account can read.</p></div>
+        <div><i data-ic="target" data-s="22"></i><h3>Encrypted secrets</h3><p>Passwords, sign-in tokens and API keys are encrypted with your system keychain.</p></div>
+        <div><i data-ic="trash" data-s="22"></i><h3>Deletes on a schedule</h3><p>Keep everything, or remove stored emails after 7 days to a year. Your mailbox is never touched.</p></div>
+        <div><i data-ic="inbox" data-s="22"></i><h3>Can't send mail</h3><p>Gmail access is read plus drafts. Sortlet can't send, delete or move your mail.</p></div>
+        <div><i data-ic="sort" data-s="22"></i><h3>Offline option</h3><p>Choose the rules engine and sorting never leaves your computer.</p></div>
+        <div><i data-ic="download" data-s="22"></i><h3>Updates itself</h3><p>Sortlet checks for new versions at startup and every few hours, and updates itself.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Install -->
+  <section class="band install" id="install">
+    <div class="wrap">
+      <div class="band-head">
+        <h2 class="h2">Install it in a minute.</h2>
+        <p class="prose">Version 0.2.0. Pick your system; the steps cover the one-time security prompt for apps downloaded outside an app store.</p>
+      </div>
+      <div class="os-tabs" role="tablist" aria-label="Operating system">
+        <button role="tab" id="tab-mac" aria-controls="panel-mac" aria-selected="true">macOS</button>
+        <button role="tab" id="tab-win" aria-controls="panel-win" aria-selected="false" tabindex="-1">Windows</button>
+        <button role="tab" id="tab-linux" aria-controls="panel-linux" aria-selected="false" tabindex="-1">Linux</button>
+      </div>
+
+      <div class="os-panel" id="panel-mac" role="tabpanel" aria-labelledby="tab-mac">
+        <ol class="steps">
+          <li><div>Download the <strong>.dmg</strong> for your Mac, open it, and drag <strong>Sortlet</strong> to Applications.</div></li>
+          <li><div>Open Sortlet. macOS blocks it the first time because the app isn't notarized yet.</div></li>
+          <li><div>Go to <strong>System Settings → Privacy &amp; Security</strong>, scroll down and click <strong>Open Anyway</strong>, then <strong>Open</strong>. You only do this once.</div></li>
+          <li><div>Add an account: <strong>Sign in with Google</strong> for Gmail, or pick your provider and use an app password.</div></li>
+        </ol>
+        <div class="files">
+          <a data-file="Sortlet-0.2.0-arm64.dmg">Apple silicon (M1 and later)<span>Sortlet-0.2.0-arm64.dmg</span></a>
+          <a data-file="Sortlet-0.2.0-x64.dmg">Intel Mac<span>Sortlet-0.2.0-x64.dmg</span></a>
+        </div>
+      </div>
+
+      <div class="os-panel" id="panel-win" role="tabpanel" aria-labelledby="tab-win" hidden>
+        <ol class="steps">
+          <li><div>Download the <strong>installer</strong>, or the <strong>portable</strong> version if you'd rather not install anything.</div></li>
+          <li><div>If SmartScreen warns you, click <strong>More info</strong>, then <strong>Run anyway</strong>.</div></li>
+          <li><div>Follow the installer. The installed version updates itself; the portable one tells you when a new version is out.</div></li>
+          <li><div>Add an account: <strong>Sign in with Google</strong> for Gmail, or pick your provider and use an app password.</div></li>
+        </ol>
+        <div class="files">
+          <a data-file="Sortlet-Setup-0.2.0.exe">Installer<span>Sortlet-Setup-0.2.0.exe</span></a>
+          <a data-file="Sortlet-0.2.0-portable.exe">Portable<span>Sortlet-0.2.0-portable.exe</span></a>
+        </div>
+      </div>
+
+      <div class="os-panel" id="panel-linux" role="tabpanel" aria-labelledby="tab-linux" hidden>
+        <ol class="steps">
+          <li><div>Download the <strong>AppImage</strong> (updates itself) or the <strong>.deb</strong> for Debian and Ubuntu.</div></li>
+          <li><div>Make it runnable and start it:
+            <pre>chmod +x Sortlet-0.2.0-x86_64.AppImage
+./Sortlet-0.2.0-x86_64.AppImage</pre>
+            Or install the package:
+            <pre>sudo dpkg -i Sortlet-0.2.0-amd64.deb</pre></div></li>
+          <li><div>Add an account: <strong>Sign in with Google</strong> for Gmail, or pick your provider and use an app password.</div></li>
+        </ol>
+        <div class="files">
+          <a data-file="Sortlet-0.2.0-x86_64.AppImage">AppImage, x64<span>Sortlet-0.2.0-x86_64.AppImage</span></a>
+          <a data-file="Sortlet-0.2.0-arm64.AppImage">AppImage, ARM<span>Sortlet-0.2.0-arm64.AppImage</span></a>
+          <a data-file="Sortlet-0.2.0-amd64.deb">Debian, x64<span>Sortlet-0.2.0-amd64.deb</span></a>
+          <a data-file="Sortlet-0.2.0-arm64.deb">Debian, ARM<span>Sortlet-0.2.0-arm64.deb</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="closing">
+    <div class="wrap">
+      <h2 class="h2">Free to use.<br>Your mail stays yours.</h2>
+      <div class="get">
+        <a class="btn" href="https://github.com/RajeshRenato/open-sortlet/releases/latest">See the latest release</a>
+        <small>Version 0.2.0. Release notes and every file are on GitHub.</small>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Sortlet 0.2.0</span>
+    <span><a href="https://github.com/RajeshRenato/open-sortlet/releases">Releases</a><a href="https://github.com/RajeshRenato/open-sortlet/issues">Report a problem</a></span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  // ---------- icons: the app's own stroke paths (src/renderer/components/Icon.tsx) ----------
+  const P = {
+    scan: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7", chat: "M4 5h16v11H9l-5 4z",
+    settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
+    plus: "M12 5v14M5 12h14", close: "M6 6l12 12M18 6L6 18", inbox: "M3 13h5l2 3h4l2-3h5M5 5h14l2 8v6H3v-6z",
+    flag: "M5 21V4h11l-2 4 2 4H5", sort: "M4 6h16M4 12h10M4 18h6", search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",
+    send: "M4 12l16-8-6 16-2.5-6.5z", trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13", check: "M5 12.5l4.5 4.5L19 7",
+    target: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", download: "M12 4v11M7 10l5 5 5-5M5 20h14",
+    database: "M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
+    alert: "M12 8v5M12 16.5v.5M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",
+  };
+  const svg = (name, s = 16) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${P[name]}"/></svg>`;
+  const paintIcons = (root) => root.querySelectorAll("i[data-ic]").forEach((i) => (i.outerHTML = svg(i.dataset.ic, +(i.dataset.s || 16))));
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- categories: names and colours from the app (src/renderer/util.ts) ----------
+  const CATS = [
+    ["Action Needed", "#E5484D", "Someone needs something from you"],
+    ["Meetings", "#3E7BFA", "Invites, reschedules, calendar replies"],
+    ["Sales & Leads", "#F08C00", "Inbound interest, intros, deals"],
+    ["Finance", "#12A594", "Invoices, receipts, payments, renewals"],
+    ["Personal", "#8E4EC6", "Family, friends, travel"],
+    ["Newsletters", "#5B6CD9", "Things you subscribed to read"],
+    ["Promotions", "#D6409F", "Sales, offers and marketing"],
+    ["Notifications", "#7C8A9E", "Alerts from apps and services"],
+    ["Spam", "#A0715A", "Junk that slipped past your provider"],
+    ["Other", "#98A2B3", "Everything else"],
+  ];
+  const color = Object.fromEntries(CATS.map(([n, c]) => [n, c]));
+  const today = new Date().toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+  document.querySelectorAll(".today").forEach((s) => (s.textContent = today));
+
+  // ---------- hero mail (invented) ----------
+  const W = { label: "you@lumen.studio", dot: "#3E7BFA" }, H = { label: "you@icloud.com", dot: "#12A594" };
+  const MAIL = [
+    { from: "Zoom", t: "8:12 AM", subj: "Payment failed for Zoom Workplace Pro", snip: "We weren't able to charge the card ending in 4417.", cat: "Finance", attn: "Zoom payment failed; update the card before Nov 14", acct: W, unread: 1, sel: 1 },
+    { from: "Daniel Okafor", t: "8:04 AM", subj: "Re: Q4 rollout plan", snip: "Does Thursday 10am work for the walkthrough? I'll bring the revised timeline.", cat: "Action Needed", reply: 1, acct: W, unread: 1 },
+    { from: "Priya Raman", t: "7:51 AM", subj: "Signed SOW by Friday?", snip: "Legal is ready on our side. Could you send the signed copy by Friday?", cat: "Sales & Leads", reply: 1, acct: W, unread: 1 },
+    { from: "Google", t: "7:40 AM", subj: "Security alert: new sign-in on Mac", snip: "Your Google Account was just signed in to from a new Mac.", cat: "Notifications", attn: "New sign-in from a Mac in Bengaluru; check it was you", acct: H },
+    { from: "Google Calendar", t: "7:22 AM", subj: "Invitation: Design review @ Wed 3pm", snip: "Lena Fischer has invited you to Design review.", cat: "Meetings", acct: W },
+    { from: "Mom", t: "7:05 AM", subj: "Are you coming on the 23rd?", snip: "Let me know soon so I can plan lunch for everyone.", cat: "Personal", reply: 1, acct: H, unread: 1 },
+    { from: "Stripe", t: "6:48 AM", subj: "Your receipt from Lumen Studio #4021", snip: "Amount paid $1,200.00. Thanks for your business.", cat: "Finance", acct: W },
+    { from: "Aurora Air", t: "6:30 AM", subj: "Schedule change for AU 302", snip: "Your flight to Singapore now departs at 06:40.", cat: "Personal", attn: "Flight AU 302 now departs 06:40, not 09:15", acct: H },
+    { from: "Lena Fischer", t: "6:12 AM", subj: "Intro: Acme wants a demo", snip: "Looping you in with Sam at Acme, who'd love a walkthrough.", cat: "Sales & Leads", acct: W },
+    { from: "The Weekly Brief", t: "6:00 AM", subj: "9 essays worth your Sunday", snip: "This week: pricing pages, quiet launches and the case for fewer meetings.", cat: "Newsletters", acct: H },
+    { from: "GitHub", t: "5:46 AM", subj: "[lumen/web] CI passed on main", snip: "All checks have passed for 3f2a9c1.", cat: "Notifications", acct: W },
+    { from: "Figma", t: "5:30 AM", subj: "Your Professional plan renews in 7 days", snip: "We'll charge $180.00 on Nov 19.", cat: "Finance", acct: W },
+    { from: "Nimbus Store", t: "5:02 AM", subj: "48 hours only: 30% off everything", snip: "Our biggest sale of the season ends Sunday.", cat: "Promotions", acct: H },
+    { from: "Prize Desk", t: "4:41 AM", subj: "You have won 2.5 BTC", snip: "Claim your reward now by confirming your wallet.", cat: "Spam", acct: H },
+    { from: "Facilities", t: "4:10 AM", subj: "Parking level B closed Saturday", snip: "Resurfacing work from 8am to 4pm.", cat: "Other", acct: W },
+  ];
+  const meta = (m) =>
+    `<span class="cat">${esc(m.cat)}</span>` +
+    (m.attn ? `<span class="attn">${svg("alert", 12)}Attention</span>` : "") +
+    (m.reply ? `<span class="flag">${svg("flag", 12)}Reply</span>` : "") +
+    `<span class="acct"><i style="background:${m.acct.dot}"></i>${m.acct.label}</span>`;
+
+  const rows = MAIL.map((m) => {
+    const li = document.createElement("li");
+    li.className = "row" + (m.unread ? " unread" : "") + (m.sel ? " sel" : "");
+    li.innerHTML =
+      `<div class="row-top"><span class="from">${esc(m.from)}</span><span class="when">${m.t}</span></div>` +
+      `<div class="subject">${esc(m.subj)}</div><div class="snippet"></div><div class="row-meta">${meta(m)}</div>`;
+    $("rows").appendChild(li);
+    return { m, li, cat: li.querySelector(".cat"), snip: li.querySelector(".snippet") };
+  });
+
+  const slots = Object.fromEntries(CATS.map(([name, c]) => {
+    const el = document.createElement("div");
+    el.className = "slot is-empty";
+    el.style.setProperty("--c", c);
+    el.innerHTML = `<span class="slot-fill"></span><span class="slot-label">${esc(name)}</span><span class="count"></span>`;
+    $("rack").appendChild(el);
+    return [name, { el, n: 0, count: el.querySelector(".count") }];
+  }));
+
+  const total = MAIL.length;
+  const reading = $("reading"), readingCat = $("reading-cat"), readingAttn = $("reading-attn");
+  let reply = 0, attn = 0, sorted = 0;
+
+  const setCount = (el, n, cls) => { el.textContent = n; el.classList.toggle(cls, n > 0); };
+  const paintRack = () => {
+    const max = Math.max(1, ...Object.values(slots).map((s) => s.n));
+    for (const s of Object.values(slots)) {
+      s.count.textContent = s.n || "";
+      s.el.classList.toggle("is-empty", !s.n);
+      s.el.style.setProperty("--fill", (s.n / max) * 100 + "%");
+    }
+  };
+  const reset = () => {
+    reply = attn = sorted = 0;
+    for (const r of rows) {
+      r.li.classList.remove("sorted", "flash");
+      r.li.style.setProperty("--c", "#b4bcc8");
+      r.cat.textContent = "Unsorted";
+      r.snip.textContent = r.m.snip;
+    }
+    for (const s of Object.values(slots)) s.n = 0;
+    paintRack();
+    setCount($("c-reply"), 0, "flagged");
+    setCount($("c-attn"), 0, "alerted");
+    $("c-unsorted").textContent = total;
+    $("unsorted").classList.remove("gone");
+    $("progress").classList.remove("done");
+    $("progress-text").textContent = `Categorizing 0/${total}`;
+    $("progress-bar").style.width = "0";
+    reading.classList.add("pending");
+    readingCat.textContent = "Unsorted";
+    readingCat.style.removeProperty("--c");
+    readingAttn.classList.remove("on");
+    readingAttn.innerHTML = "";
+  };
+  const sortOne = (r, animate) => {
+    const m = r.m;
+    r.li.classList.add("sorted");
+    r.li.style.setProperty("--c", color[m.cat]);
+    r.cat.textContent = m.cat;
+    if (m.attn) r.snip.textContent = m.attn;
+    if (animate) { r.li.classList.remove("flash"); void r.li.offsetWidth; r.li.classList.add("flash"); }
+    slots[m.cat].n++;
+    paintRack();
+    if (m.reply) setCount($("c-reply"), ++reply, "flagged");
+    if (m.attn) setCount($("c-attn"), ++attn, "alerted");
+    sorted++;
+    $("c-unsorted").textContent = total - sorted;
+    $("progress-text").textContent = `Categorizing ${sorted}/${total}`;
+    $("progress-bar").style.width = (sorted / total) * 100 + "%";
+    if (m.sel) {
+      reading.classList.remove("pending");
+      readingCat.textContent = m.cat;
+      readingCat.style.setProperty("--c", color[m.cat]);
+      readingAttn.classList.add("on");
+      readingAttn.innerHTML = svg("check", 11);
+    }
+  };
+  const finish = () => {
+    $("unsorted").classList.add("gone");
+    $("progress").classList.add("done");
+    $("progress-text").textContent = `Fetched ${total} (${total} new), categorized ${total}`;
+  };
+
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let timers = [];
+  const play = () => {
+    timers.forEach(clearTimeout);
+    timers = [];
+    reset();
+    if (still) { rows.forEach((r) => sortOne(r, false)); finish(); return; }
+    rows.forEach((r, i) => timers.push(setTimeout(() => sortOne(r, true), 900 + i * 230)));
+    timers.push(setTimeout(finish, 900 + total * 230 + 300));
+  };
+  $("replay").addEventListener("click", play);
+
+  // start once the window is on screen
+  reset();
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver((es, o) => { if (es.some((e) => e.isIntersecting)) { o.disconnect(); play(); } }, { threshold: 0.2 }).observe($("app"));
+  } else play();
+
+  // ---------- scale the fixed-size window to its column ----------
+  const fits = [...document.querySelectorAll(".fit")];
+  const fit = () => fits.forEach((f) => {
+    const s = Math.min(1, f.clientWidth / +f.dataset.w);
+    f.style.height = +f.dataset.h * s + "px";
+    f.firstElementChild.style.transform = `scale(${s})`;
+  });
+  fit();
+  addEventListener("resize", fit);
+
+  // ---------- categories shelf (a typical week) ----------
+  const WEEK = { "Action Needed": 9, Meetings: 14, "Sales & Leads": 11, Finance: 17, Personal: 8, Newsletters: 31, Promotions: 26, Notifications: 38, Spam: 5, Other: 4 };
+  const weekMax = Math.max(...Object.values(WEEK));
+  $("big-rack").innerHTML = CATS.map(([n, c, what]) =>
+    `<div class="big-slot" style="--c:${c};--fill:${(WEEK[n] / weekMax) * 100}%"><span class="fill"></span><span class="name">${esc(n)}</span><span class="what">${esc(what)}</span><span class="n">${WEEK[n]}</span></div>`
+  ).join("");
+
+  // ---------- needs attention view ----------
+  const ATTN = [
+    { from: "Zoom", t: "Today", subj: "Payment failed for Zoom Workplace Pro", attn: "Zoom payment failed; update the card before Nov 14", cat: "Finance", acct: W, unread: 1 },
+    { from: "Google", t: "Today", subj: "Security alert: new sign-in on Mac", attn: "New sign-in from a Mac in Bengaluru; check it was you", cat: "Notifications", acct: H, unread: 1 },
+    { from: "Aurora Air", t: "Yesterday", subj: "Schedule change for AU 302", attn: "Flight AU 302 now departs 06:40, not 09:15", cat: "Personal", acct: H },
+    { from: "DocuSign", t: "Mon", subj: "Lumen and Acme MSA is waiting for you", attn: "Contract waiting for your signature; link expires Nov 18", cat: "Action Needed", acct: W },
+  ];
+  $("attn-rows").innerHTML = ATTN.map((m) =>
+    `<li class="row sorted${m.unread ? " unread" : ""}" style="--c:${color[m.cat]}"><div class="row-top"><span class="from">${esc(m.from)}</span><span class="when">${m.t}</span></div>` +
+    `<div class="subject">${esc(m.subj)}</div><div class="snippet">${esc(m.attn)}</div><div class="row-meta">${meta(m)}</div></li>`
+  ).join("");
+
+  paintIcons(document);
+
+  // ---------- downloads ----------
+  const DL = "https://github.com/RajeshRenato/open-sortlet/releases/latest/download/";
+  for (const a of document.querySelectorAll("[data-file]")) a.href = DL + a.dataset.file;
+  const ua = navigator.userAgent;
+  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  let os = null;
+  if (/Mac/i.test(platform) || /Macintosh/.test(ua)) os = "mac";
+  else if (/Win/i.test(platform) || /Windows/.test(ua)) os = "win";
+  else if (/Linux/i.test(platform) && !/Android/i.test(ua)) os = "linux";
+  const primary = {
+    mac: ["Download for macOS", "Sortlet-0.2.0-arm64.dmg", 'Version 0.2.0 for Apple silicon. <a href="' + DL + 'Sortlet-0.2.0-x64.dmg">Intel Mac?</a> <a href="#install">All downloads</a>'],
+    win: ["Download for Windows", "Sortlet-Setup-0.2.0.exe", 'Version 0.2.0 installer. <a href="#install">Portable and other platforms</a>'],
+    linux: ["Download for Linux", "Sortlet-0.2.0-x86_64.AppImage", 'Version 0.2.0 AppImage for x64. <a href="#install">.deb and ARM builds</a>'],
+  }[os];
+  if (primary) {
+    $("primary-label").textContent = primary[0];
+    $("primary-download").href = DL + primary[1];
+    $("primary-note").innerHTML = primary[2];
+  }
+
+  // ---------- install tabs ----------
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  const select = (tab, focus) => {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute("aria-selected", on);
+      t.tabIndex = on ? 0 : -1;
+      $(t.getAttribute("aria-controls")).hidden = !on;
+    }
+    if (focus) tab.focus();
+  };
+  tabs.forEach((t, i) => {
+    t.addEventListener("click", () => select(t));
+    t.addEventListener("keydown", (e) => {
+      const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (d) select(tabs[(i + d + tabs.length) % tabs.length], true);
+    });
+  });
+  if (os) select($("tab-" + os));
+})();
+</script>
+</body>
+</html>
